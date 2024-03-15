@@ -4,12 +4,12 @@ from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import faiss
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.embeddings import HuggingFaceInstructEmbeddings
+# from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import bot_template, user_template, css
 # from langchain_community.llms import huggingface_hub
-from langchain.llms import huggingface_hub
+# from langchain.llms import huggingface_hub
 
 def get_text_from_pdf(pdf_docs):
     text = ""
@@ -30,13 +30,13 @@ def get_text_chunks(raw_text):
     return chunks
 
 def get_vectorstores(text_chunks):
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(model = "text-embedding-3-small" ,dimensions=512)
     # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
     vectorstore = faiss.FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
 def get_conversation_chain(vectorstore):
-    my_llm = ChatOpenAI()
+    my_llm = ChatOpenAI(model = "gpt-3.5-turbo-0125")
     # my_llm = huggingface_hub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
