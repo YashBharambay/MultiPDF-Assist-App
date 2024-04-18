@@ -8,6 +8,9 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import bot_template, user_template, css
+from langchain_community.vectorstores import qdrant
+import qdrant_client
+import os
 # from langchain_community.llms import huggingface_hub
 # from langchain.llms import huggingface_hub
 
@@ -29,14 +32,23 @@ def get_text_chunks(raw_text):
     chunks = text_splitter.split_text(raw_text)
     return chunks
 
-def get_vectorstores(text_chunks):
-    embeddings = OpenAIEmbeddings(model = "text-embedding-3-small" ,dimensions=512)
-    # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
-    vectorstore = faiss.FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-    return vectorstore
+def get_vectorstores():
+    client = qdrant_client.QdrantClient(
+        os.getenv("QDRANT_HOST"),
+        api_key=os.getenv("QDRANT_API_KEY")
+    )
+    
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+
+    vector_store = qdrant.Qdrant(
+        client=client, 
+        collection_name=os.getenv("QDRANT_COLLECTION_NAME"), 
+        embeddings=embeddings,
+    )
+    return vector_store
 
 def get_conversation_chain(vectorstore):
-    my_llm = ChatOpenAI(model = "gpt-3.5-turbo-0125")
+    my_llm = ChatOpenAI(model = "gpt-4")
     # my_llm = huggingface_hub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
@@ -58,91 +70,44 @@ def handle_UserInput(user_question):
                 st.write(bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
     else:
         st.error("Conversation not initialized.")
-
-
-    style = """
-    <style>
-      # MainMenu {visibility: hidden;}
-      footer {visibility: hidden;}
-     .stApp { bottom: 105px; }
-    </style>
-    """
-
-    style_div = styles(
-        position="fixed",
-        left=0,
-        bottom=0,
-        margin=px(0, 0, 0, 0),
-        width=percent(100),
-        color="black",
-        text_align="center",
-        height="auto",
-        opacity=1
-    )
-
-    style_hr = styles(
-        display="block",
-        margin=px(8, 8, "auto", "auto"),
-        border_style="inset",
-        border_width=px(2)
-    )
-
-    body = p()
-    foot = div(
-        style=style_div
-    )(
-        hr(
-            style=style_hr
-        ),
-        body
-    )
-
-    st.markdown(style, unsafe_allow_html=True)
-
-    for arg in args:
-        if isinstance(arg, str):
-            body(arg)
-
-        elif isinstance(arg, HtmlElement):
-            body(arg)
-
-    st.markdown(str(foot), unsafe_allow_html=True)
+    
 def main():
-    load_dotenv()
-    st.set_page_config(page_title="Chat with multiple PDFs",
-                       page_icon=":books:")
+    try:
+        load_dotenv()
+        st.set_page_config(page_title="Ancient India explorer",
+                        page_icon=":books:")
 
-    st.write(css, unsafe_allow_html=True)
+        st.write(css, unsafe_allow_html=True)
 
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = None
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    st.header("Chat with multiple PDFs :books:")
-    user_question = st.text_input("Ask a question about your documents:")
-    if user_question:
-        handle_UserInput(user_question)
-
-    with st.sidebar:
-        st.subheader("Your documents")
-        pdf_docs = st.file_uploader("Upload your PDFs and click on process", accept_multiple_files=True)
-        if st.button("Process"):
+        # Sidebar
+        st.sidebar.title("Ancient India Explorer")
+        st.sidebar.markdown("This project allows you to ask questions and learn about various aspects of ancient Indian civilization.")
+      
+        if "conversation" not in st.session_state:
             with st.spinner('Processing'):
-                # get raw texts from pdfs
-                raw_text = get_text_from_pdf(pdf_docs)
-                # get the chunks of text
-                text_chunks = get_text_chunks(raw_text)
-                # create and store chunks in vector 
-                vectorstore = get_vectorstores(text_chunks)
-                # creating a conversation chain
+                st.session_state.conversation = None
+                vectorstore = get_vectorstores()
                 st.session_state.conversation = get_conversation_chain(vectorstore)
 
-                st.success('Done!')
+                st.success('Conversation Chain Initialized!')
+        # # Initialize user input
+        # if "text_input" not in st.session_state:
+        #     st.session_state.text_input = ""
 
-    st.markdown("Made with 🖥️ by [Yash Bharambay](https://www.linkedin.com/in/yash-bharambay-9873b220a/)", unsafe_allow_html=True)
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
+        st.header("Ancient India Explorer 🇮🇳✨")
+        # Using text_input widget for user input
+        user_question = st.chat_input("Ask questions and learn about various aspects of ancient Indian civilization:",key="user_question_input")
+        # st.session_state.text_input = user_question
+        if user_question:
+            with st.expander("Chat History", expanded=True):
+                handle_UserInput(user_question)
+    except Exception as error:
+        print(f"Error: {error}") 
+        # Footer
+        # st.markdown("<div style='position: static; left: 0; bottom: 0; width: 100%; text-align: center; padding: 10px;'>Made with 🖥️ by <a href='https://www.linkedin.com/in/yash-bharambay-9873b220a/'>Yash Bharambay</a></div>", unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
